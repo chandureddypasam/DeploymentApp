@@ -1,0 +1,36 @@
+.App {
+  text-align: center;
+}
+
+form{
+  display:inline-block;
+  background-color: rgb(169, 240, 240);
+}
+
+form label{
+  width:120px;
+  display:inline-block;
+  
+}
+
+form div{
+  margin: 10px;
+}
+img{
+  width:150px;
+  object-fit: contain;
+}
+
+nav{
+  display:flex;
+  justify-content: space-evenly;
+  background-color: yellowgreen;
+  color:rgb(91, 160, 220);
+}
+
+a{
+  text-decoration: none;
+  color:rgb(28, 22, 50);
+  font-size: 1.8rem;
+
+}
