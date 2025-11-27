@@ -23,7 +23,7 @@ function EditProfile() {
       emailInputRef.current.value = userDetails.email;
       ageInputRef.current.value = userDetails.age;
       mobileNoInputRef.current.value = userDetails.mobileNo;
-      setprofilePic(`http://localhost:3333/${userDetails.profilePic}`)
+      setprofilePic(`/${userDetails.profilePic}`)
       
       },[])
 
@@ -50,7 +50,7 @@ function EditProfile() {
         }
 
 
-        let JSONData = await fetch("http://localhost:3333/updateProfile",reqOptions);
+        let JSONData = await fetch("/updateProfile",reqOptions);
         let JSOData = await JSONData.json();
         console.log(JSOData);
         alert(JSOData.msg);
