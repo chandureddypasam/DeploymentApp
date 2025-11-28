@@ -23,7 +23,7 @@ function EditProfile() {
       emailInputRef.current.value = userDetails.email;
       ageInputRef.current.value = userDetails.age;
       mobileNoInputRef.current.value = userDetails.mobileNo;
-      setprofilePic(`/${userDetails.profilePic}`)
+      setprofilePic(`https://deploymentapp-1-3la5.onrender.com${userDetails.profilePic}`)
       
       },[])
 

@@ -4,173 +4,219 @@ let cors = require("cors");
 let multer = require("multer");
 let jwt = require("jsonwebtoken");
 let bcrypt = require("bcrypt");
-let dotenv = require("dotenv")
-
-dotenv.config()
+let dotenv = require("dotenv");
+const path = require("path");
+dotenv.config();
 
 let app = express();
 
+// ---------- COMMON MIDDLEWARE ----------
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded());
-app.use('/profilePics', express.static('profilePics'));
+app.use(express.urlencoded({ extended: true }));
 
-const path = require("path");
+// Serve uploaded profile pics (Render compatible)
+app.use(
+  "/profilePics",
+  express.static(path.join(__dirname, "profilePics"))
+);
 
-app.use(express.static(path.join(__dirname,"./client/build")));
+// Serve React build
+app.use(express.static(path.join(__dirname, "./client/build")));
 
-app.get("/*", (req, res) => {
-  res.sendFile(path.join(__dirname, "./client/build/index.html"));
-});
-
-
+// ---------- MULTER CONFIG ----------
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    console.log(req.file);
-    cb(null, 'profilePics');
+    cb(null, "profilePics");
   },
   filename: (req, file, cb) => {
     cb(null, `${Date.now()}_${file.originalname}`);
-  }
+  },
 });
 
 const upload = multer({ storage: storage });
 
-// Validate Token
+// ---------- MONGOOSE SETUP ----------
+let studentSchema = new mongoose.Schema({
+  firstName: String,
+  lastName: String,
+  email: String,
+  password: String,
+  age: Number,
+  mobileNo: Number,
+  profilePic: String,
+});
+
+let student = new mongoose.model(
+  "students",
+  studentSchema,
+  "2507MERNStudents"
+);
+
+let ConctedToMDB = async () => {
+  try {
+    await mongoose.connect(process.env.MDBURL);
+    console.log("Successfully Connected to MDB");
+  } catch (err) {
+    console.log("Unable to Connected to MDB");
+  }
+};
+ConctedToMDB();
+
+// ---------- ROUTES ----------
+
+// Validate token and get user details
 app.post("/validateToken", upload.none(), async (req, res) => {
-  console.log(req.body);
+  try {
+    let decryptedCredintials = jwt.verify(req.body.token, "brn");
 
-  let decryptedCredintials = jwt.verify(req.body.token, "brn");
-  console.log(decryptedCredintials);
+    let userArr = await student.find({ email: decryptedCredintials.email });
 
-  let userArr = await student.find().and([{ email: decryptedCredintials.email }]);
-
-  if (userArr.length > 0) {
-
-    if (userArr[0].password === decryptedCredintials.password) {
-
-      let dataToSend = {
-        firstName: userArr[0].firstName,
-        lastName: userArr[0].lastName,
-        email: userArr[0].email,
-        age: userArr[0].age,
-        mobileNo: userArr[0].mobileNo,
-        profilePic: userArr[0].profilePic,
-      };
-
-      res.json({ status: "Success", msg: "Credintials are correct", data: dataToSend });
-
-    } else {
-      res.json({ status: "failure", msg: "Invalid Password" });
+    if (userArr.length === 0) {
+      return res.json({ status: "failure", msg: "User Does not exist" });
     }
 
-  } else {
-    res.json({ status: "failure", msg: "User Does not exist" });
+    let user = userArr[0];
+
+    // password stored as hash → compare using bcrypt
+    let isValidPassword = await bcrypt.compare(
+      decryptedCredintials.password,
+      user.password
+    );
+
+    if (!isValidPassword) {
+      return res.json({ status: "failure", msg: "Invalid Password" });
+    }
+
+    let dataToSend = {
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      age: user.age,
+      mobileNo: user.mobileNo,
+      profilePic: user.profilePic,
+    };
+
+    res.json({
+      status: "Success",
+      msg: "Credintials are correct",
+      data: dataToSend,
+    });
+  } catch (err) {
+    res.json({ status: "failure", msg: "Invalid or expired token" });
   }
 });
 
+// Login
 app.post("/login", upload.none(), async (req, res) => {
+  try {
+    let userArr = await student.find({ email: req.body.email });
 
-  console.log(req.body);
-
-  let userArr = await student.find().and([{ email: req.body.email }]);
-  let token = jwt.sign({ email: req.body.email, password: req.body.password }, "brn");
-
-  let validPassword = await bcrypt.compare(req.body.password, userArr[0].password);
-
-  if (userArr.length > 0) {
-
-    if (validPassword === true) {
-
-      let dataToSend = {
-        firstName: userArr[0].firstName,
-        lastName: userArr[0].lastName,
-        email: userArr[0].email,
-        age: userArr[0].age,
-        mobileNo: userArr[0].mobileNo,
-        profilePic: userArr[0].profilePic,
-        token: token
-      };
-
-      res.json({ status: "Success", msg: "Credintials are correct", data: dataToSend });
-
-    } else {
-      res.json({ status: "failure", msg: "Invalid Password" });
+    if (userArr.length === 0) {
+      return res.json({ status: "failure", msg: "User Does not exist" });
     }
 
-  } else {
-    res.json({ status: "failure", msg: "User Does not exist" });
+    let user = userArr[0];
+
+    let isValidPassword = await bcrypt.compare(
+      req.body.password,
+      user.password
+    );
+
+    if (!isValidPassword) {
+      return res.json({ status: "failure", msg: "Invalid Password" });
+    }
+
+    let token = jwt.sign(
+      { email: req.body.email, password: req.body.password },
+      "brn"
+    );
+
+    let dataToSend = {
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      age: user.age,
+      mobileNo: user.mobileNo,
+      profilePic: user.profilePic,
+      token: token,
+    };
+
+    res.json({
+      status: "Success",
+      msg: "Credintials are correct",
+      data: dataToSend,
+    });
+  } catch (err) {
+    res.json({ status: "failure", msg: "Something went wrong in login" });
   }
 });
 
 // Signup
 app.post("/signup", upload.single("profilePic"), async (req, res) => {
-
   console.log(req.file);
   console.log(req.body);
 
-  let hashedpassword = await bcrypt.hash(req.body.password, 10);
-
   try {
+    let hashedPassword = await bcrypt.hash(req.body.password, 10);
+
     let user = new student({
       firstName: req.body.firstName,
       lastName: req.body.lastName,
       email: req.body.email,
-      password: hashedpassword,
+      password: hashedPassword,
       age: req.body.age,
       mobileNo: req.body.mobileNo,
-      profilePic: req.file.path
+      // IMPORTANT: fix slashes for URL
+      profilePic: req.file.path.replace(/\\/g, "/"),
     });
 
     await student.insertMany([user]);
-
     res.json({ status: "Success", msg: "Account Created Successfully" });
-
   } catch (err) {
+    console.log(err);
     res.json({ status: "Failure", msg: "Unable to create account" });
   }
 });
 
-
 // Update Profile
 app.patch("/updateProfile", upload.single("profilePic"), async (req, res) => {
-
   console.log(req.body);
-
   try {
+    let updateData = {};
 
-    if (req.body.firstName.trim().length > 0) {
-      await student.updateMany({ email: req.body.email }, { firstName: req.body.firstName });
+    if (req.body.firstName && req.body.firstName.trim().length > 0) {
+      updateData.firstName = req.body.firstName;
     }
-    if (req.body.lastName.trim().length > 0) {
-      await student.updateMany({ email: req.body.email }, { lastName: req.body.lastName });
+    if (req.body.lastName && req.body.lastName.trim().length > 0) {
+      updateData.lastName = req.body.lastName;
     }
-    if (req.body.password.trim().length > 0) {
-      await student.updateMany({ email: req.body.email }, { password: req.body.password });
+    if (req.body.password && req.body.password.trim().length > 0) {
+      // hash new password
+      updateData.password = await bcrypt.hash(req.body.password, 10);
     }
-    if (req.body.age > 0) {
-      await student.updateMany({ email: req.body.email }, { age: req.body.age });
+    if (req.body.age && req.body.age > 0) {
+      updateData.age = req.body.age;
     }
-    if (req.body.mobileNo.trim().length > 0) {
-      await student.updateMany({ email: req.body.email }, { mobileNo: req.body.mobileNo });
+    if (req.body.mobileNo && req.body.mobileNo.trim().length > 0) {
+      updateData.mobileNo = req.body.mobileNo;
     }
     if (req.file) {
-      await student.updateMany({ email: req.body.email }, { profilePic: req.file.path });
+      updateData.profilePic = req.file.path.replace(/\\/g, "/");
     }
 
-    res.json({ status: "Success", msg: "Updated Successfully" });
+    await student.updateMany({ email: req.body.email }, updateData);
 
+    res.json({ status: "Success", msg: "Updated Successfully" });
   } catch (err) {
+    console.log(err);
     res.json({ status: "Failure", msg: "Nothing is updated" });
   }
 });
 
-
 // Delete Profile
 app.delete("/deleteProfile", upload.none(), async (req, res) => {
-
   let delResult = await student.deleteMany({ email: req.body.email });
-
   if (delResult.deletedCount > 0) {
     res.json({ Status: "Success", msg: "Account deleted Successfully" });
   } else {
@@ -178,35 +224,12 @@ app.delete("/deleteProfile", upload.none(), async (req, res) => {
   }
 });
 
+// ---------- REACT FALLBACK (KEEP LAST) ----------
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "client/build/index.html"));
+});
 
+// ---------- START SERVER ----------
 app.listen(process.env.PORT, () => {
   console.log(`Listening to port ${process.env.PORT}`);
 });
-
-
-
-let studentSchema = new mongoose.Schema({
-    firstName:String,
-    lastName:String,
-    email:String,
-    password:String,
-    age:Number,
-    mobileNo:Number,
-    profilePic:String
-
-});
-
-let student = new mongoose.model("Student", studentSchema, "2507NewBatch");
-let ConctedToMDB = async()=>{
-    try{
-         await mongoose.connect(process.env.MDBURL);
-         console.log("Successfully Connected to MDB");
-         
-
-    }catch(err){
-        console.log("Unable to Connected to MDB");
-
-    }
-  
-}
-ConctedToMDB();
